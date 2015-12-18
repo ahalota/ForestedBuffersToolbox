@@ -360,27 +360,30 @@ class ForestedBuffer(object):
         #Need to check for integer type, with 1 = cover.        
         in_cover = arcpy.Parameter(displayName="Canopy Cover Map (UTM Projection Required)", name="in_cover", datatype="GPRasterLayer", parameterType="Required", direction="Input")
         
-        transect_length = arcpy.Parameter(displayName="Buffer Length (m)", name="transect_length", datatype="GPLong", parameterType="Required", direction="Input")        
+        transect_length = arcpy.Parameter(displayName="Maximum Buffer Width (m)", name="transect_length", datatype="GPLong", parameterType="Required", direction="Input")        
         transect_length.value = 100
         
-        transect_width = arcpy.Parameter(displayName="Buffer Slice Width (m)", name="transect_width", datatype="GPLong", parameterType="Required", direction="Input")        
+        transect_width = arcpy.Parameter(displayName="Split Interval Length (m)", name="transect_width", datatype="GPLong", parameterType="Required", direction="Input")        
         transect_width.value = 10
 
         tolerance = arcpy.Parameter(displayName="Tolerated Distance from Hydro Feature (m)", name="tolerance", datatype="GPLong", parameterType="Required", direction="Input")        
         tolerance.value = 5
         
+        key_widths = arcpy.Parameter(displayName ="FRBWidths of Interest", name="key_widths", datatype="GPString", parameterType="Optional", direction="Input")
+        key_widths.value = "0 5 10 30 50 100"
+        
         out_hydro = arcpy.Parameter(displayName = "Output Hydrological Feature", name="out_hydro", datatype="GPFeatureLayer", parameterType="Required", direction="Output")
-        out_hydro.value = ''.join([arcpy.env.scratchFolder,"\\frb_hydro.shp"])
+        out_hydro.value = ''.join([arcpy.env.workspace,"\\frb_hydro.shp"])
         
         out_frb = arcpy.Parameter(displayName = "Output Buffer Feature", name="out_frb", datatype="GPFeatureLayer", parameterType="Required", direction="Output")
-        out_frb.value = ''.join([arcpy.env.scratchFolder,"\\frb_swath.shp"])
+        out_frb.value = ''.join([arcpy.env.workspace,"\\frb_swath.shp"])
         
         isDel = arcpy.Parameter(displayName = "Delete intermediate files", name="isDel", datatype="GPBoolean", parameterType="Required", direction="Input")
         isDel.value = 'false'
         
         reuseFiles = arcpy.Parameter(displayName = "Continue with existing files", name="reuseFiles", datatype="GPBoolean", parameterType="Required", direction="Input")
         reuseFiles.value = 'true'
-        return [out_folder, in_hydro, in_cover, transect_length, transect_width, tolerance, out_hydro, out_frb, isDel, reuseFiles]
+        return [out_folder, in_hydro, in_cover, transect_length, transect_width, tolerance, key_widths, out_hydro, out_frb, isDel, reuseFiles]
     
     def isLicensed(self):
         #Should check for spatial analyst and license for flat end buffers
@@ -402,15 +405,21 @@ class ForestedBuffer(object):
         transect_length = parameters[3].valueAsText
         transect_width = parameters[4].valueAsText
         tolerance = parameters[5].valueAsText
-        out_hydro = parameters[6].valueAsText
-        out_frb = parameters[7].valueAsText
-        isDel = (parameters[8].valueAsText == 'true')
-        reuseFiles = (parameters[9].valueAsText == 'true')
+        if (parameters[6].valueAsText is not None):
+            key_widths = (parameters[6].valueAsText).split(" ") #array of strings
+        else:
+            key_widths = [] #convenience so we don't have to check later.
+        for i in key_widths:
+            arcpy.AddMessage(''.join(["over_",i]))
+        out_hydro = parameters[7].valueAsText
+        out_frb = parameters[8].valueAsText
+        isDel = (parameters[9].valueAsText == 'true')
+        reuseFiles = (parameters[10].valueAsText == 'true')
         
         #our workspace
         arcpy.env.overwriteOutput = True
+        arcpy.env.workspace = out_folder
         
-
         if not (os.path.isdir(''.join([out_folder,"\\frb_data"]))):
             arcpy.CreateFolder_management(out_folder,"frb_data")
         out_folder = ''.join([out_folder,"\\frb_data"])
@@ -547,15 +556,15 @@ class ForestedBuffer(object):
                     arcpy.AddMessage(''.join(["Adding FRBWidth to River-split for zone " , id]))
                     arcpy.AddField_management(riv_fc, "FRBWidth1", "DOUBLE","#","#","#","#","NULLABLE","NON_REQUIRED","#")
                     arcpy.AddField_management(riv_fc, "FRBWidth2", "DOUBLE","#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Num_FRB", "DOUBLE","#","#","#","#","NULLABLE","NON_REQUIRED","#")
                     
-                    arcpy.AddField_management(riv_fc, "Over_7", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Over_15", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Over_30", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Over_45", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Over_60", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Over_75", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    arcpy.AddField_management(riv_fc, "Over_90", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    for i in key_widths:                                             
+                        arcpy.AddField_management(riv_fc, ''.join(["Over_",i,"m"]), "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    #arcpy.AddField_management(riv_fc, "Over_15", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    #arcpy.AddField_management(riv_fc, "Over_30", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    #arcpy.AddField_management(riv_fc, "Over_45", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    #arcpy.AddField_management(riv_fc, "Over_60", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    #arcpy.AddField_management(riv_fc, "Over_75", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
+                    #arcpy.AddField_management(riv_fc, "Over_90", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
                 
                     #src: http://gis.stackexchange.com/questions/95957/most-efficient-method-to-join-multiple-fields-in-arcgis
                     #Pull values from frb_fc
@@ -573,34 +582,39 @@ class ForestedBuffer(object):
                 
                     #Put values into riv_split
                     global globTransectId
-                    targfields = ['TransectID', 'FRBWidth1', 'FRBWidth2', 'Num_FRB','Over_7','Over_15','Over_30','Over_45','Over_60','Over_75','Over_90']
+                    
+                    targfields = ['TransectID', 'FRBWidth1', 'FRBWidth2']
+                    for i in key_widths:
+                        targfields.append(''.join(["Over_",i,"m"]))
+                    
+                    overKeys = [int(i) for i in key_widths]
+                    numOverKeys = len(overKeys)
+                    
                     with arcpy.da.UpdateCursor(riv_fc, targfields) as recs:
                         for rec in recs:
-                            over = {7:0,15:0,30:0,45:0,60:0,75:0,90:0}
+                            over = {el:0 for el in overKeys}
                             globTransectId += 1
                             tid = rec[0]
-                            numFRB = 0
                             if side1.has_key(tid):
                                 rec[1] = side1[tid]
-                                numFRB += 1
                                 for threshVal in over:
                                     if (rec[1] > threshVal):
                                         over[threshVal] += 1
                                 
                             if side2.has_key(tid):
                                 rec[2] = side2[tid]
-                                numFRB += 1
                                 for threshVal in over:
                                     if (rec[2] > threshVal):
                                         over[threshVal] += 1
-                            rec[3] = numFRB
-                            rec[4] = over[7]
-                            rec[5] = over[15]
-                            rec[6] = over[30]
-                            rec[7] = over[45]
-                            rec[8] = over[60]
-                            rec[9] = over[75]
-                            rec[10] = over[90]
+                            for i in range(0,numOverKeys):
+                                rec[3+i] = over[overKeys[i]]
+                            #rec[4] = over[7]
+                            #rec[5] = over[15]
+                            #rec[6] = over[30]
+                            #rec[7] = over[45]
+                            #rec[8] = over[60]
+                            #rec[9] = over[75]
+                            #rec[10] = over[90]
                             recs.updateRow(rec)
                         del rec, recs
                     
