@@ -1,7 +1,5 @@
 import math
 import os
-import multiprocessing
-import time
 
 globTransectId = 0
 
@@ -21,7 +19,6 @@ class Toolbox(object):
         self.alias = "RiparianBuffers"
 
         # List of tool classes associated with this toolbox
-        #self.tools = [LinearTransect, TransectWindows, CalculateForestedBuffer, TrimTransectWindows]
         self.tools = [ForestedBuffer]
 
 def LinearTransect_execute(in_feature,length,dist,units,out_feature,out_riv):
@@ -142,26 +139,6 @@ def autoIncrement():
         arcpy.Append_management ([Azline1, Azline2], Azline, "NO_TEST")
         arcpy.CopyFeatures_management(Azline,out_feature)
         
-        '''#Dissolve Azline
-        #arcpy.Dissolve_management (Azline, Azline_Dissolve,"TransectID", "", "SINGLE_PART")
-        
-        Azline_Dissolve = Azline #TEST! Don't change now because I want them to remain split at the middle
-        
-        #Add Fields to Azline_Dissolve
-        FieldsNames2=["TransectID","x_start", "y_start", "x_end", "y_end"]
-        for fn2 in FieldsNames2:
-            arcpy.AddField_management (Azline_Dissolve, fn2, "DOUBLE")
-            
-        #Calculate Azline_Dissolve fields
-        arcpy.CalculateField_management (Azline_Dissolve, "x_start", "!Shape!.positionAlongLine(0,True).firstPoint.X", "PYTHON_9.3") 
-        arcpy.CalculateField_management (Azline_Dissolve, "y_start", "!Shape!.positionAlongLine(0,True).firstPoint.Y", "PYTHON_9.3")
-        arcpy.CalculateField_management (Azline_Dissolve, "x_end", "!Shape!.positionAlongLine(1,True).firstPoint.X", "PYTHON_9.3")
-        arcpy.CalculateField_management (Azline_Dissolve, "y_end", "!Shape!.positionAlongLine(1,True).firstPoint.Y", "PYTHON_9.3")
-        
-        #Generate output file
-        arcpy.XYToLine_management (Azline_Dissolve, out_feature,"x_start", "y_start", "x_end","y_end", "", idField[], spatial_reference)
-        '''
-
         #Clean up files
         arcpy.Delete_management(LineDissolve)
         arcpy.Delete_management(LineSplit)
@@ -409,8 +386,6 @@ class ForestedBuffer(object):
             key_widths = (parameters[6].valueAsText).split(" ") #array of strings
         else:
             key_widths = [] #convenience so we don't have to check later.
-        for i in key_widths:
-            arcpy.AddMessage(''.join(["over_",i]))
         out_hydro = parameters[7].valueAsText
         out_frb = parameters[8].valueAsText
         isDel = (parameters[9].valueAsText == 'true')
@@ -533,6 +508,8 @@ class ForestedBuffer(object):
                 if (not os.path.isfile(buf_clip_fc)):
                     arcpy.AddMessage(''.join(["Clipping initial buffer to perim for zone " , id]))
                     arcpy.Clip_analysis(buf_fc,perim_lyr,buf_clip_fc,"#")
+                    if (not os.path.isfile(buf_clip_fc)): #Results where blank, skip this zone
+                        continue    #Not tested, might work?
                     
                 if (not os.path.isfile(buf_sp_fc)):
                     arcpy.AddMessage(''.join(["Converting clipped buffer to singleparts for zone " , id]))
@@ -559,12 +536,6 @@ class ForestedBuffer(object):
                     
                     for i in key_widths:                                             
                         arcpy.AddField_management(riv_fc, ''.join(["Over_",i,"m"]), "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    #arcpy.AddField_management(riv_fc, "Over_15", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    #arcpy.AddField_management(riv_fc, "Over_30", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    #arcpy.AddField_management(riv_fc, "Over_45", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    #arcpy.AddField_management(riv_fc, "Over_60", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    #arcpy.AddField_management(riv_fc, "Over_75", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
-                    #arcpy.AddField_management(riv_fc, "Over_90", "SHORT", "#","#","#","#","NULLABLE","NON_REQUIRED","#")
                 
                     #src: http://gis.stackexchange.com/questions/95957/most-efficient-method-to-join-multiple-fields-in-arcgis
                     #Pull values from frb_fc
@@ -578,7 +549,7 @@ class ForestedBuffer(object):
                                 side1[tid] = row[1]
                             else:
                                 side2[tid] = row[1]
-                    del row, rows
+                    del rows
                 
                     #Put values into riv_split
                     global globTransectId
@@ -608,40 +579,14 @@ class ForestedBuffer(object):
                                         over[threshVal] += 1
                             for i in range(0,numOverKeys):
                                 rec[3+i] = over[overKeys[i]]
-                            #rec[4] = over[7]
-                            #rec[5] = over[15]
-                            #rec[6] = over[30]
-                            #rec[7] = over[45]
-                            #rec[8] = over[60]
-                            #rec[9] = over[75]
-                            #rec[10] = over[90]
                             recs.updateRow(rec)
-                        del rec, recs
-                    
-                    # Replace a layer/table view name with a path to a dataset (which can be a layer file) or create the layer/table view within the script
-    # The following inputs are layers or table views: "al_frb_riv"
-                    '''arcpy.AddMessage(''.join(["Counting key buffer widths for zone " , id]))
-
-                    CodeBlock_frb="""def nums(f1,f2,w):
- num = 0
- if (f1>w):
-  num+=1
- if (f2>w):
-  num+=1
- return num"""
-                    arcpy.CalculateField_management(riv_fc,"Over_7","nums(!FRBWidth1!,!FRBWidth2!,7)", "PYTHON_9.3", CodeBlock_frb)        
-                    arcpy.CalculateField_management(riv_fc,"Over_15","nums(!FRBWidth1!,!FRBWidth2!,15)", "PYTHON_9.3", CodeBlock_frb)
-                    arcpy.CalculateField_management(riv_fc,"Over_30","nums(!FRBWidth1!,!FRBWidth2!,30)", "PYTHON_9.3", CodeBlock_frb)
-                    arcpy.CalculateField_management(riv_fc,"Over_45","nums(!FRBWidth1!,!FRBWidth2!,45)", "PYTHON_9.3", CodeBlock_frb)
-                    arcpy.CalculateField_management(riv_fc,"Over_60","nums(!FRBWidth1!,!FRBWidth2!,60)", "PYTHON_9.3", CodeBlock_frb)
-                    arcpy.CalculateField_management(riv_fc,"Over_75","nums(!FRBWidth1!,!FRBWidth2!,75)", "PYTHON_9.3", CodeBlock_frb)
-                    arcpy.CalculateField_management(riv_fc,"Over_90","nums(!FRBWidth1!,!FRBWidth2!,90)", "PYTHON_9.3", CodeBlock_frb)'''
+                        del recs
                 
                 riv_files.append(riv_fc)
                 frb_files.append(frb_fc)
 
                 #Clean up.
-                arcpy.Delete_management(buf_sp_lyr)
+                #arcpy.Delete_management(buf_sp_lyr) #Temporarily disabled because it's messing with the continuation.
 
                 if isDel:
                     arcpy.Delete_management(buf_fc)
@@ -649,9 +594,7 @@ class ForestedBuffer(object):
                     arcpy.Delete_management(buf_sp_fc)
                     arcpy.Delete_management(trans_fc)
                 
-        #6. Recompile all the created rivers into one file.
+        #6. Recompile all the created rivers and buffers into one file.
         arcpy.Merge_management (riv_files, out_hydro)
-        arcpy.Merge_management (frb_files, out_frb)
-        #7. Recompile all the created buffer slices into one file(?)
-        
+        arcpy.Merge_management (frb_files, out_frb)        
         
